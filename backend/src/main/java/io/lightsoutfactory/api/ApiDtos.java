@@ -25,7 +25,7 @@ public final class ApiDtos {
     public record CreatePlanRequest(@Size(max = 1000) String summary) {
     }
 
-    public record ApproveRequest(@NotBlank @Size(max = 80) String actor) {
+    public record ApproveRequest(@NotBlank @Pattern(regexp = "local-demo") String actor) {
     }
 
     public record ExecuteRequest(

@@ -128,7 +128,12 @@ public class WorkflowService {
         AgentExecutor.Result result = executors.resolve(request.providerType()).execute(task.getTitle(), request.scenario());
         run.complete(result.status(), result.output(), result.errorCode());
         item.transitionTo(WorkflowState.VERIFYING);
-        record(item, "RUN_FINISHED", "execution", run.getId(), correlationId);
+        String runAction = switch (result.status()) {
+            case "SUCCEEDED" -> "RUN_FINISHED";
+            case "TIMED_OUT" -> "RUN_TIMED_OUT";
+            default -> "RUN_FAILED";
+        };
+        record(item, runAction, "execution", run.getId(), correlationId);
 
         QualityGateEvaluator.Evaluation evaluation = gateEvaluator.evaluate(run);
         QualityGateResult gate = gates.save(new QualityGateResult(run, evaluation.status(), evaluation.evidence()));

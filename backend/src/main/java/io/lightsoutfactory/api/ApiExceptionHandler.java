@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -23,6 +24,11 @@ public class ApiExceptionHandler {
                 .map(error -> error.getField() + " " + error.getDefaultMessage())
                 .distinct().collect(Collectors.joining("; "));
         return problem(HttpStatus.BAD_REQUEST, detail);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    ResponseEntity<ProblemDetail> handleMalformedRequest(HttpMessageNotReadableException exception) {
+        return problem(HttpStatus.BAD_REQUEST, "The request body is malformed or contains an unsupported value.");
     }
 
     @ExceptionHandler(OptimisticLockingFailureException.class)

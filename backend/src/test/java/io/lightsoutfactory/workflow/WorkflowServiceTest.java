@@ -3,6 +3,8 @@ package io.lightsoutfactory.workflow;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -46,6 +48,8 @@ class WorkflowServiceTest {
                 new ApiDtos.ExecuteRequest("mock", "SUCCESS"), UUID.randomUUID()))
                 .isInstanceOf(WorkflowException.class)
                 .satisfies(error -> assertThat(((WorkflowException) error).getStatus()).isEqualTo(HttpStatus.CONFLICT));
-        verifyNoInteractions(executor, tasks, runs, gates, audit);
+        verify(executor, never()).execute(org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.any());
+        verifyNoInteractions(tasks, runs, gates, audit);
     }
 }

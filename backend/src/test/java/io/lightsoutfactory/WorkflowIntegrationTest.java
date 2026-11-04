@@ -11,10 +11,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -68,6 +66,9 @@ class WorkflowIntegrationTest {
         assertThat(execution.getBody()).isNotNull();
         assertThat(execution.getBody().simulated()).isTrue();
         assertThat(execution.getBody().gateStatus()).isEqualTo("PASSED");
+        ResponseEntity<String> duplicate = http.exchange(base + "/plans/" + plan.id() + "/execute",
+                HttpMethod.POST, new HttpEntity<>(new ApiDtos.ExecuteRequest("mock", "SUCCESS")), String.class);
+        assertThat(duplicate.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
 
         ResponseEntity<ApiDtos.WorkItemView> persisted = http.getForEntity(
                 base + "/work-items/" + item.id(), ApiDtos.WorkItemView.class);
@@ -77,5 +78,26 @@ class WorkflowIntegrationTest {
         assertThat(List.of(events.getBody())).extracting(ApiDtos.AuditView::action)
                 .contains("WORK_ITEM_CREATED", "PLAN_CREATED", "PLAN_APPROVED", "RUN_STARTED",
                         "RUN_FINISHED", "QUALITY_GATE_PASSED");
+
+        http.postForEntity(base + "/work-items/" + item.id() + "/complete", Map.of(), ApiDtos.WorkItemView.class);
+        assertThat(http.getForEntity(base + "/work-items/" + item.id(), ApiDtos.WorkItemView.class)
+                .getBody().status()).isEqualTo("COMPLETED");
+
+        ApiDtos.WorkItemView failedItem = http.postForEntity(base + "/work-items",
+                new ApiDtos.CreateWorkItemRequest("Failing mock", "Exercise failure handling", "Failure is visible", "P3"),
+                ApiDtos.WorkItemView.class).getBody();
+        ApiDtos.PlanView failedPlan = http.postForEntity(base + "/work-items/" + failedItem.id() + "/plans",
+                Map.of(), ApiDtos.PlanView.class).getBody();
+        http.postForEntity(base + "/plans/" + failedPlan.id() + "/approve",
+                new ApiDtos.ApproveRequest("local-demo"), ApiDtos.PlanView.class);
+        ApiDtos.ExecutionView failedRun = http.postForEntity(base + "/plans/" + failedPlan.id() + "/execute",
+                new ApiDtos.ExecuteRequest("mock", "FAILURE"), ApiDtos.ExecutionView.class).getBody();
+        assertThat(failedRun.gateStatus()).isEqualTo("FAILED");
+        assertThat(http.getForEntity(base + "/work-items/" + failedItem.id(), ApiDtos.WorkItemView.class)
+                .getBody().status()).isEqualTo("FAILED");
+        ResponseEntity<ApiDtos.AuditView[]> failedEvents = http.getForEntity(
+                base + "/work-items/" + failedItem.id() + "/audit-events", ApiDtos.AuditView[].class);
+        assertThat(List.of(failedEvents.getBody())).extracting(ApiDtos.AuditView::action)
+                .contains("RUN_FAILED", "QUALITY_GATE_FAILED");
     }
 }

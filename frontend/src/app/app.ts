@@ -1,13 +1,13 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { Observable } from 'rxjs';
 import { FactoryApi, AuditEvent, Execution, WorkItem } from './factory-api';
 
 @Component({
   selector: 'app-root',
   imports: [DatePipe, ReactiveFormsModule],
   templateUrl: './app.html',
-  styleUrl: './app.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class App {
@@ -101,7 +101,7 @@ export class App {
     }
   }
 
-  private runAction<T>(request: import('rxjs').Observable<T>, success: (value: T) => void): void {
+  private runAction<T>(request: Observable<T>, success: (value: T) => void): void {
     if (this.busy()) return;
     this.busy.set(true);
     this.error.set('');

@@ -8,6 +8,5 @@ public enum WorkflowState {
     VERIFYING,
     REVIEW_REQUIRED,
     COMPLETED,
-    FAILED,
-    CANCELLED
+    FAILED
 }
