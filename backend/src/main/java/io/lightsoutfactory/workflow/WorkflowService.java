@@ -8,6 +8,7 @@ import io.lightsoutfactory.audit.AuditEvent;
 import io.lightsoutfactory.audit.AuditEventRepository;
 import io.lightsoutfactory.execution.ExecutionRun;
 import io.lightsoutfactory.execution.ExecutionRunRepository;
+import io.lightsoutfactory.observability.FactoryMetrics;
 import io.lightsoutfactory.planning.AgentTask;
 import io.lightsoutfactory.planning.AgentTaskRepository;
 import io.lightsoutfactory.planning.ExecutionPlan;
@@ -19,13 +20,21 @@ import io.lightsoutfactory.workitem.WorkItem;
 import io.lightsoutfactory.workitem.WorkItemRepository;
 import java.util.List;
 import java.util.UUID;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.function.Supplier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
 
 @Service
 public class WorkflowService {
     private static final String DEMO_ACTOR = "local-demo";
+    private static final Logger LOGGER = LoggerFactory.getLogger(WorkflowService.class);
 
     private final WorkItemRepository workItems;
     private final ExecutionPlanRepository plans;
@@ -35,6 +44,8 @@ public class WorkflowService {
     private final AuditEventRepository audit;
     private final AgentExecutorRegistry executors;
     private final QualityGateEvaluator gateEvaluator;
+    private final FactoryMetrics metrics;
+    private final ObservationRegistry observations;
 
     public WorkflowService(
             WorkItemRepository workItems,
@@ -44,7 +55,9 @@ public class WorkflowService {
             QualityGateResultRepository gates,
             AuditEventRepository audit,
             AgentExecutorRegistry executors,
-            QualityGateEvaluator gateEvaluator) {
+            QualityGateEvaluator gateEvaluator,
+            FactoryMetrics metrics,
+            ObservationRegistry observations) {
         this.workItems = workItems;
         this.plans = plans;
         this.tasks = tasks;
@@ -53,15 +66,20 @@ public class WorkflowService {
         this.audit = audit;
         this.executors = executors;
         this.gateEvaluator = gateEvaluator;
+        this.metrics = metrics;
+        this.observations = observations;
     }
 
     @Transactional
     public ApiDtos.WorkItemView createWorkItem(ApiDtos.CreateWorkItemRequest request, UUID correlationId) {
-        String priority = request.priority() == null ? "P2" : request.priority();
-        WorkItem item = workItems.save(new WorkItem(request.title().trim(), request.description().trim(),
-                request.acceptanceCriteria().trim(), priority));
-        record(item, "WORK_ITEM_CREATED", "work-item", item.getId(), correlationId);
-        return ApiDtos.WorkItemView.from(item, null, null, null);
+        return observe("factory.work_item.create", correlationId, null, () -> {
+            String priority = request.priority() == null ? "P2" : request.priority();
+            WorkItem item = workItems.save(new WorkItem(request.title().trim(), request.description().trim(),
+                    request.acceptanceCriteria().trim(), priority));
+            metrics.workItemCreated();
+            record(item, "WORK_ITEM_CREATED", "work-item", item.getId(), correlationId);
+            return ApiDtos.WorkItemView.from(item, null, null, null);
+        });
     }
 
     @Transactional(readOnly = true)
@@ -77,18 +95,20 @@ public class WorkflowService {
 
     @Transactional
     public ApiDtos.PlanView createPlan(UUID workItemId, ApiDtos.CreatePlanRequest request, UUID correlationId) {
-        WorkItem item = requireWorkItem(workItemId);
-        if (item.getStatus() != WorkflowState.CREATED
-                || plans.findFirstByWorkItem_IdOrderByCreatedAtDesc(workItemId).isPresent()) {
-            throw conflict("A plan can only be created once for a newly created work item.");
-        }
-        String summary = request.summary() == null || request.summary().isBlank()
-                ? "Address the work item and verify each acceptance criterion." : request.summary().trim();
-        ExecutionPlan plan = plans.save(new ExecutionPlan(item, summary));
-        tasks.save(new AgentTask(plan, item.getTitle(), item.getAcceptanceCriteria()));
-        item.transitionTo(WorkflowState.AWAITING_APPROVAL);
-        record(item, "PLAN_CREATED", "plan", plan.getId(), correlationId);
-        return ApiDtos.PlanView.from(plan);
+        return observe("factory.workflow.plan", correlationId, workItemId, () -> {
+            WorkItem item = requireWorkItem(workItemId);
+            if (item.getStatus() != WorkflowState.CREATED
+                    || plans.findFirstByWorkItem_IdOrderByCreatedAtDesc(workItemId).isPresent()) {
+                throw conflict("A plan can only be created once for a newly created work item.");
+            }
+            String summary = request.summary() == null || request.summary().isBlank()
+                    ? "Address the work item and verify each acceptance criterion." : request.summary().trim();
+            ExecutionPlan plan = plans.save(new ExecutionPlan(item, summary));
+            tasks.save(new AgentTask(plan, item.getTitle(), item.getAcceptanceCriteria()));
+            item.transitionTo(WorkflowState.AWAITING_APPROVAL);
+            record(item, "PLAN_CREATED", "plan", plan.getId(), correlationId);
+            return ApiDtos.PlanView.from(plan);
+        });
     }
 
     @Transactional(readOnly = true)
@@ -98,34 +118,47 @@ public class WorkflowService {
 
     @Transactional
     public ApiDtos.PlanView approvePlan(UUID planId, ApiDtos.ApproveRequest request, UUID correlationId) {
-        ExecutionPlan plan = requirePlan(planId);
-        WorkItem item = plan.getWorkItem();
-        if (!"AWAITING_APPROVAL".equals(plan.getStatus()) || item.getStatus() != WorkflowState.AWAITING_APPROVAL) {
-            throw conflict("Only a plan awaiting approval can be approved.");
-        }
-        plan.approve(request.actor().trim());
-        item.transitionTo(WorkflowState.APPROVED);
-        record(item, "PLAN_APPROVED", "plan", planId, correlationId, request.actor().trim());
-        return ApiDtos.PlanView.from(plan);
+        return observe("factory.workflow.approve", correlationId, null, () -> {
+            ExecutionPlan plan = requirePlan(planId);
+            WorkItem item = plan.getWorkItem();
+            if (!"AWAITING_APPROVAL".equals(plan.getStatus())
+                    || item.getStatus() != WorkflowState.AWAITING_APPROVAL) {
+                throw conflict("Only a plan awaiting approval can be approved.");
+            }
+            plan.approve(request.actor().trim());
+            item.transitionTo(WorkflowState.APPROVED);
+            record(item, "PLAN_APPROVED", "plan", planId, correlationId, request.actor().trim());
+            return ApiDtos.PlanView.from(plan);
+        });
     }
 
     @Transactional
     public ApiDtos.ExecutionView executePlan(UUID planId, ApiDtos.ExecuteRequest request, UUID correlationId) {
-        ExecutionPlan plan = requirePlan(planId);
+        ExecutionPlan observedPlan = requirePlan(planId);
+        return observe("factory.workflow.execute", correlationId, observedPlan.getWorkItem().getId(),
+                () -> executeApprovedPlan(observedPlan, request, correlationId));
+    }
+
+    private ApiDtos.ExecutionView executeApprovedPlan(
+            ExecutionPlan plan, ApiDtos.ExecuteRequest request, UUID correlationId) {
         WorkItem item = plan.getWorkItem();
         if (!"APPROVED".equals(plan.getStatus()) || item.getStatus() != WorkflowState.APPROVED) {
             throw conflict("Plan approval is required before execution.");
         }
 
-        AgentTask task = tasks.findFirstByPlan_Id(planId)
+        AgentTask task = tasks.findFirstByPlan_Id(plan.getId())
                 .orElseThrow(() -> new IllegalStateException("Plan has no task."));
         task.start();
         plan.markExecuting();
         item.transitionTo(WorkflowState.EXECUTING);
         ExecutionRun run = runs.save(new ExecutionRun(task, request.providerType(), correlationId));
+        Instant executionStartedAt = Instant.now();
+        metrics.executionStarted();
         record(item, "RUN_STARTED", "execution", run.getId(), correlationId);
 
-        AgentExecutor.Result result = executors.resolve(request.providerType()).execute(task.getTitle(), request.scenario());
+        AgentExecutor executor = executors.resolve(request.providerType());
+        AgentExecutor.Result result = observe("factory.agent.execute", correlationId, item.getId(),
+                () -> executor.execute(task.getTitle(), request.scenario()));
         run.complete(result.status(), result.output(), result.errorCode());
         item.transitionTo(WorkflowState.VERIFYING);
         String runAction = switch (result.status()) {
@@ -135,7 +168,8 @@ public class WorkflowService {
         };
         record(item, runAction, "execution", run.getId(), correlationId);
 
-        QualityGateEvaluator.Evaluation evaluation = gateEvaluator.evaluate(run);
+        QualityGateEvaluator.Evaluation evaluation = observe(
+                "factory.quality_gate.evaluate", correlationId, item.getId(), () -> gateEvaluator.evaluate(run));
         QualityGateResult gate = gates.save(new QualityGateResult(run, evaluation.status(), evaluation.evidence()));
         boolean passed = "PASSED".equals(evaluation.status());
         task.finish(passed);
@@ -143,6 +177,8 @@ public class WorkflowService {
         item.transitionTo(passed ? WorkflowState.REVIEW_REQUIRED : WorkflowState.FAILED);
         record(item, passed ? "QUALITY_GATE_PASSED" : "QUALITY_GATE_FAILED",
                 "quality-gate", gate.getId(), correlationId);
+        metrics.executionFinished(result.status(), gate.getStatus(),
+                Duration.between(executionStartedAt, Instant.now()), task.getAttemptCount());
         return ApiDtos.ExecutionView.from(run, gate);
     }
 
@@ -204,5 +240,24 @@ public class WorkflowService {
     private void record(
             WorkItem item, String action, String resourceType, UUID resourceId, UUID correlationId, String actor) {
         audit.save(new AuditEvent(actor, action, resourceType, resourceId, item.getId(), correlationId));
+        LOGGER.atInfo()
+                .addKeyValue("component", "workflow")
+                .addKeyValue("event", action)
+                .addKeyValue("workItemId", item.getId())
+                .addKeyValue("executionId", "execution".equals(resourceType) ? resourceId : null)
+                .addKeyValue("correlationId", correlationId)
+                .log("Workflow event");
+    }
+
+    private <T> T observe(String name, UUID correlationId, UUID workItemId, Supplier<T> operation) {
+        Observation observation = Observation.createNotStarted(name, observations)
+                .lowCardinalityKeyValue("workflow.operation", name);
+        if (correlationId != null) {
+            observation.highCardinalityKeyValue("correlation.id", correlationId.toString());
+        }
+        if (workItemId != null) {
+            observation.highCardinalityKeyValue("work.item.id", workItemId.toString());
+        }
+        return observation.observe(operation);
     }
 }

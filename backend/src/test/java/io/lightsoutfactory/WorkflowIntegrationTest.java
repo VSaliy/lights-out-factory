@@ -3,6 +3,7 @@ package io.lightsoutfactory;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.lightsoutfactory.api.ApiDtos;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -39,6 +40,9 @@ class WorkflowIntegrationTest {
 
     @Autowired
     TestRestTemplate http;
+
+    @Autowired
+    MeterRegistry metrics;
 
     @Test
     void createApproveExecuteAndAuditArePersisted() {
@@ -99,5 +103,12 @@ class WorkflowIntegrationTest {
                 base + "/work-items/" + failedItem.id() + "/audit-events", ApiDtos.AuditView[].class);
         assertThat(List.of(failedEvents.getBody())).extracting(ApiDtos.AuditView::action)
                 .contains("RUN_FAILED", "QUALITY_GATE_FAILED");
+        assertThat(metrics.get("factory.work.items.created").counter().count()).isEqualTo(2.0);
+        assertThat(metrics.get("factory.executions.started").counter().count()).isEqualTo(2.0);
+        assertThat(metrics.get("factory.executions.completed").counter().count()).isEqualTo(1.0);
+        assertThat(metrics.get("factory.executions.failed").counter().count()).isEqualTo(1.0);
+        assertThat(metrics.get("factory.quality.gates.failed").counter().count()).isEqualTo(1.0);
+        assertThat(metrics.get("factory.executions.duration").timer().count()).isEqualTo(2L);
+        assertThat(metrics.get("factory.workflows.active").gauge().value()).isEqualTo(1.0);
     }
 }

@@ -14,6 +14,7 @@ import io.lightsoutfactory.api.ApiDtos;
 import io.lightsoutfactory.api.WorkflowException;
 import io.lightsoutfactory.audit.AuditEventRepository;
 import io.lightsoutfactory.execution.ExecutionRunRepository;
+import io.lightsoutfactory.observability.FactoryMetrics;
 import io.lightsoutfactory.planning.AgentTaskRepository;
 import io.lightsoutfactory.planning.ExecutionPlan;
 import io.lightsoutfactory.planning.ExecutionPlanRepository;
@@ -23,6 +24,8 @@ import io.lightsoutfactory.workitem.WorkItem;
 import io.lightsoutfactory.workitem.WorkItemRepository;
 import java.util.Optional;
 import java.util.UUID;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.micrometer.observation.ObservationRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 
@@ -39,7 +42,8 @@ class WorkflowServiceTest {
         when(executor.providerType()).thenReturn("mock");
         AgentExecutorRegistry registry = new AgentExecutorRegistry(java.util.List.of(executor));
         WorkflowService service = new WorkflowService(workItems, plans, tasks, runs, gates, audit,
-                registry, new QualityGateEvaluator());
+                registry, new QualityGateEvaluator(), new FactoryMetrics(new SimpleMeterRegistry(), workItems),
+                ObservationRegistry.NOOP);
         WorkItem item = new WorkItem("Health endpoint", "Expose health", "HTTP 200", "P2");
         ExecutionPlan plan = new ExecutionPlan(item, "Build and test");
         when(plans.findById(plan.getId())).thenReturn(Optional.of(plan));
