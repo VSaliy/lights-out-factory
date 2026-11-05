@@ -74,8 +74,9 @@ public class WorkflowService {
     public ApiDtos.WorkItemView createWorkItem(ApiDtos.CreateWorkItemRequest request, UUID correlationId) {
         return observe("factory.work_item.create", correlationId, null, () -> {
             String priority = request.priority() == null ? "P2" : request.priority();
-            WorkItem item = workItems.save(new WorkItem(request.title().trim(), request.description().trim(),
-                    request.acceptanceCriteria().trim(), priority));
+            WorkItem item = persist("work_item.save", correlationId, null,
+                    () -> workItems.save(new WorkItem(request.title().trim(), request.description().trim(),
+                            request.acceptanceCriteria().trim(), priority)));
             metrics.workItemCreated();
             record(item, "WORK_ITEM_CREATED", "work-item", item.getId(), correlationId);
             return ApiDtos.WorkItemView.from(item, null, null, null);
@@ -103,8 +104,10 @@ public class WorkflowService {
             }
             String summary = request.summary() == null || request.summary().isBlank()
                     ? "Address the work item and verify each acceptance criterion." : request.summary().trim();
-            ExecutionPlan plan = plans.save(new ExecutionPlan(item, summary));
-            tasks.save(new AgentTask(plan, item.getTitle(), item.getAcceptanceCriteria()));
+            ExecutionPlan plan = persist("execution_plan.save", correlationId, item.getId(),
+                    () -> plans.save(new ExecutionPlan(item, summary)));
+            persist("agent_task.save", correlationId, item.getId(),
+                    () -> tasks.save(new AgentTask(plan, item.getTitle(), item.getAcceptanceCriteria())));
             item.transitionTo(WorkflowState.AWAITING_APPROVAL);
             record(item, "PLAN_CREATED", "plan", plan.getId(), correlationId);
             return ApiDtos.PlanView.from(plan);
@@ -151,7 +154,8 @@ public class WorkflowService {
         task.start();
         plan.markExecuting();
         item.transitionTo(WorkflowState.EXECUTING);
-        ExecutionRun run = runs.save(new ExecutionRun(task, request.providerType(), correlationId));
+        ExecutionRun run = persist("execution_run.save", correlationId, item.getId(),
+                () -> runs.save(new ExecutionRun(task, request.providerType(), correlationId)));
         Instant executionStartedAt = Instant.now();
         metrics.executionStarted();
         record(item, "RUN_STARTED", "execution", run.getId(), correlationId);
@@ -170,7 +174,8 @@ public class WorkflowService {
 
         QualityGateEvaluator.Evaluation evaluation = observe(
                 "factory.quality_gate.evaluate", correlationId, item.getId(), () -> gateEvaluator.evaluate(run));
-        QualityGateResult gate = gates.save(new QualityGateResult(run, evaluation.status(), evaluation.evidence()));
+        QualityGateResult gate = persist("quality_gate.save", correlationId, item.getId(),
+                () -> gates.save(new QualityGateResult(run, evaluation.status(), evaluation.evidence())));
         boolean passed = "PASSED".equals(evaluation.status());
         task.finish(passed);
         plan.markFinished(passed);
@@ -239,7 +244,8 @@ public class WorkflowService {
 
     private void record(
             WorkItem item, String action, String resourceType, UUID resourceId, UUID correlationId, String actor) {
-        audit.save(new AuditEvent(actor, action, resourceType, resourceId, item.getId(), correlationId));
+        persist("audit_event.save", correlationId, item.getId(),
+                () -> audit.save(new AuditEvent(actor, action, resourceType, resourceId, item.getId(), correlationId)));
         LOGGER.atInfo()
                 .addKeyValue("component", "workflow")
                 .addKeyValue("event", action)
@@ -259,5 +265,9 @@ public class WorkflowService {
             observation.highCardinalityKeyValue("work.item.id", workItemId.toString());
         }
         return observation.observe(operation);
+    }
+
+    private <T> T persist(String operation, UUID correlationId, UUID workItemId, Supplier<T> action) {
+        return observe("factory.persistence." + operation, correlationId, workItemId, action);
     }
 }
