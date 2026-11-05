@@ -69,6 +69,18 @@ npm start
 
 The dev-server proxy sends `/api` and `/actuator` to `localhost:8080`; Compose serves the built SPA and reverse-proxies those paths through the UI origin.
 
+### Optional observability profile
+
+The basic stack does not start monitoring services or expose Prometheus metrics. For local metrics, traces, and a Grafana datasource, start the optional profile:
+
+```sh
+MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,prometheus \
+MANAGEMENT_TRACING_SAMPLING_PROBABILITY=1.0 \
+docker compose --profile observability up --build
+```
+
+Open Grafana at [http://localhost:3000](http://localhost:3000) or Prometheus at [http://localhost:9090](http://localhost:9090). The collector accepts OTLP on local ports 4317/4318 and writes received spans to its debug exporter (collector logs); Prometheus scrapes `/actuator/prometheus`. The optional services and exported metrics endpoint are loopback-only. Anonymous Grafana is read-only and intended only for local use. Metrics are process-lifetime counters except the active workflow gauge, which queries persisted state; retries remain zero because retry behavior is not implemented.
+
 ## Boundaries and security
 
 - The backend is a modular monolith organized into API, work-item, planning, agent, workflow, verification, execution, and audit capabilities.
@@ -81,8 +93,8 @@ The dev-server proxy sends `/api` and `/actuator` to `localhost:8080`; Compose s
 
 ## Architecture and planned work
 
-The implemented boundary and state flow are in [`docs/architecture/overview.md`](docs/architecture/overview.md). Decision records, roadmap, and a short prioritized backlog are in [`docs/adr/`](docs/adr/), [`docs/roadmap.md`](docs/roadmap.md), and [`docs/backlog.md`](docs/backlog.md). The API's OpenAPI document describes the implemented endpoints; planned integrations are explicitly future work.
+The implemented boundary and state flow are in [`docs/architecture/overview.md`](docs/architecture/overview.md), with [system context](docs/architecture/system-context.md), [containers](docs/architecture/container-diagram.md), [components](docs/architecture/component-diagram.md), [data model](docs/architecture/data-model.md), [execution lifecycle](docs/architecture/execution-lifecycle.md), and [security posture](docs/architecture/security.md). Local setup and verification are detailed in [`docs/development/`](docs/development/). Decision records, roadmap, and prioritized backlog are in [`docs/adr/`](docs/adr/), [`docs/roadmap.md`](docs/roadmap.md), and [`docs/backlog.md`](docs/backlog.md). The API's OpenAPI document describes the implemented endpoints; planned integrations are explicitly future work.
 
 ## CI
 
-GitHub Actions runs Maven tests (including the PostgreSQL Testcontainers path when Docker is available), Angular tests, and an Angular production build. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for local prerequisites and contribution guidance.
+GitHub Actions runs Maven tests (including the PostgreSQL Testcontainers path when Docker is available), Angular formatting checks, unit tests and production build, and a Playwright browser workflow against the Compose stack. See [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`docs/development/testing.md`](docs/development/testing.md) for local guidance.

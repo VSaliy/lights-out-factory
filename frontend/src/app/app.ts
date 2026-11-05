@@ -54,13 +54,10 @@ export class App {
 
   protected createWorkItem(): void {
     if (this.form.invalid || this.busy()) return;
-    this.runAction(
-      this.api.createWorkItem(this.form.getRawValue()),
-      () => {
-        this.form.reset({ title: '', description: '', acceptanceCriteria: '', priority: 'P2' });
-        this.reload();
-      },
-    );
+    this.runAction(this.api.createWorkItem(this.form.getRawValue()), () => {
+      this.form.reset({ title: '', description: '', acceptanceCriteria: '', priority: 'P2' });
+      this.reload();
+    });
   }
 
   protected createPlan(item: WorkItem): void {

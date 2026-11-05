@@ -6,7 +6,9 @@
     "start": "ng serve",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test",
+    "lint": "prettier --check 'src/**/*.{ts,html,css}' 'e2e/**/*.ts' 'playwright.config.ts'",
+    "test:e2e": "playwright test"
   },
   "private": true,
   "packageManager": "npm@10.9.9",

@@ -23,7 +23,9 @@ describe('App', () => {
     http.expectOne('/api/v1/work-items').flush([]);
     fixture.detectChanges();
 
-    const submit = fixture.nativeElement.querySelector('button[type="submit"]') as HTMLButtonElement;
+    const submit = fixture.nativeElement.querySelector(
+      'button[type="submit"]',
+    ) as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
   });
 
@@ -33,7 +35,8 @@ describe('App', () => {
     http.expectOne('/api/v1/work-items').error(new ProgressEvent('network error'));
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent)
-      .toContain('Could not load work items');
+    expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain(
+      'Could not load work items',
+    );
   });
 });

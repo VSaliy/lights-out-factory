@@ -77,6 +77,7 @@ class WorkflowIntegrationTest {
         ResponseEntity<ApiDtos.WorkItemView> persisted = http.getForEntity(
                 base + "/work-items/" + item.id(), ApiDtos.WorkItemView.class);
         assertThat(persisted.getBody().status()).isEqualTo("REVIEW_REQUIRED");
+        assertThat(metrics.get("factory.workflows.active").gauge().value()).isEqualTo(1.0);
         ResponseEntity<ApiDtos.AuditView[]> events = http.getForEntity(
                 base + "/work-items/" + item.id() + "/audit-events", ApiDtos.AuditView[].class);
         assertThat(List.of(events.getBody())).extracting(ApiDtos.AuditView::action)
@@ -109,6 +110,6 @@ class WorkflowIntegrationTest {
         assertThat(metrics.get("factory.executions.failed").counter().count()).isEqualTo(1.0);
         assertThat(metrics.get("factory.quality.gates.failed").counter().count()).isEqualTo(1.0);
         assertThat(metrics.get("factory.executions.duration").timer().count()).isEqualTo(2L);
-        assertThat(metrics.get("factory.workflows.active").gauge().value()).isEqualTo(1.0);
+        assertThat(metrics.get("factory.workflows.active").gauge().value()).isZero();
     }
 }

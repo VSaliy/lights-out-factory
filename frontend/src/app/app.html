@@ -15,10 +15,22 @@
       <p class="muted">Plan, approve, and verify bounded work with a deterministic mock agent.</p>
     </div>
     <div class="metrics" aria-label="Workflow counts">
-      <div><strong>{{ items().length }}</strong><span>Work items</span></div>
-      <div><strong>{{ count('EXECUTING') }}</strong><span>In progress</span></div>
-      <div><strong>{{ count('COMPLETED') }}</strong><span>Completed</span></div>
-      <div><strong>{{ count('FAILED') }}</strong><span>Failed</span></div>
+      <div>
+        <strong>{{ items().length }}</strong
+        ><span>Work items</span>
+      </div>
+      <div>
+        <strong>{{ count('EXECUTING') }}</strong
+        ><span>In progress</span>
+      </div>
+      <div>
+        <strong>{{ count('COMPLETED') }}</strong
+        ><span>Completed</span>
+      </div>
+      <div>
+        <strong>{{ count('FAILED') }}</strong
+        ><span>Failed</span>
+      </div>
     </div>
   </section>
 
@@ -35,16 +47,28 @@
       <h2 id="create-heading">Create a work item</h2>
       <form [formGroup]="form" (ngSubmit)="createWorkItem()">
         <label for="title">Title</label>
-        <input id="title" formControlName="title" maxlength="160" required>
+        <input id="title" formControlName="title" maxlength="160" required />
         @if (form.controls.title.touched && form.controls.title.invalid) {
           <small class="field-error">Enter a title of 1–160 characters.</small>
         }
 
         <label for="description">Description</label>
-        <textarea id="description" formControlName="description" rows="3" maxlength="4000" required></textarea>
+        <textarea
+          id="description"
+          formControlName="description"
+          rows="3"
+          maxlength="4000"
+          required
+        ></textarea>
 
         <label for="criteria">Acceptance criteria</label>
-        <textarea id="criteria" formControlName="acceptanceCriteria" rows="3" maxlength="4000" required></textarea>
+        <textarea
+          id="criteria"
+          formControlName="acceptanceCriteria"
+          rows="3"
+          maxlength="4000"
+          required
+        ></textarea>
 
         <label for="priority">Priority</label>
         <select id="priority" formControlName="priority">
@@ -81,29 +105,48 @@
               <span class="priority">{{ item.priority }}</span>
               <h3>{{ item.title }}</h3>
             </div>
-            <span class="status" [attr.data-status]="item.status">{{ item.status.replace('_', ' ') }}</span>
+            <span class="status" [attr.data-status]="item.status">{{
+              item.status.replace('_', ' ')
+            }}</span>
           </div>
           <p class="description">{{ item.description }}</p>
           <p class="criteria"><strong>Acceptance:</strong> {{ item.acceptanceCriteria }}</p>
           <div class="item-actions">
             <button type="button" class="quiet" (click)="inspect(item)">History</button>
             @if (item.status === 'CREATED') {
-              <button type="button" class="primary" (click)="createPlan(item)" [disabled]="busy()">Create plan</button>
+              <button type="button" class="primary" (click)="createPlan(item)" [disabled]="busy()">
+                Create plan
+              </button>
             } @else if (item.status === 'AWAITING_APPROVAL' && item.latestPlanId) {
-              <button type="button" class="primary" (click)="approve(item)" [disabled]="busy()">Approve plan</button>
+              <button type="button" class="primary" (click)="approve(item)" [disabled]="busy()">
+                Approve plan
+              </button>
             } @else if (item.status === 'APPROVED' && item.latestPlanId) {
-              <button type="button" class="primary" (click)="execute(item)" [disabled]="busy()">Execute mock</button>
+              <button type="button" class="primary" (click)="execute(item)" [disabled]="busy()">
+                Execute mock
+              </button>
             } @else if (item.status === 'REVIEW_REQUIRED') {
-              <button type="button" class="primary" (click)="complete(item)" [disabled]="busy()">Mark complete</button>
+              <button type="button" class="primary" (click)="complete(item)" [disabled]="busy()">
+                Mark complete
+              </button>
             }
           </div>
           @if (selectedId() === item.id) {
             <div class="history">
               <h4>Execution evidence</h4>
               @if (execution()) {
-                <p><span class="simulated">SIMULATED</span> {{ execution()?.providerType }} · {{ execution()?.status }}</p>
+                <p>
+                  <span class="simulated">SIMULATED</span> {{ execution()?.providerType }} ·
+                  {{ execution()?.status }}
+                </p>
                 <p>{{ execution()?.outputSummary || execution()?.errorCode }}</p>
-                <p>Quality gate: <strong [class.good]="execution()?.gateStatus === 'PASSED'">{{ execution()?.gateStatus }}</strong> — {{ execution()?.gateEvidence }}</p>
+                <p>
+                  Quality gate:
+                  <strong [class.good]="execution()?.gateStatus === 'PASSED'">{{
+                    execution()?.gateStatus
+                  }}</strong>
+                  — {{ execution()?.gateEvidence }}
+                </p>
                 <p class="muted">Correlation ID: {{ execution()?.correlationId }}</p>
               } @else {
                 <p class="muted">No execution evidence for this item yet.</p>
@@ -114,7 +157,11 @@
               } @else {
                 <ol class="timeline">
                   @for (event of events(); track event.id) {
-                    <li><time>{{ event.occurredAt | date:'short' }}</time><strong>{{ event.action.replaceAll('_', ' ') }}</strong><span>{{ event.actor }}</span></li>
+                    <li>
+                      <time>{{ event.occurredAt | date: 'short' }}</time
+                      ><strong>{{ event.action.replaceAll('_', ' ') }}</strong
+                      ><span>{{ event.actor }}</span>
+                    </li>
                   }
                 </ol>
               }
@@ -125,7 +172,7 @@
     </section>
   </section>
   <footer>
-    <strong>Simulation only.</strong> The mock agent does not edit repositories or run tests.
-    The quality gate checks simulated output provenance, not generated software.
+    <strong>Simulation only.</strong> The mock agent does not edit repositories or run tests. The
+    quality gate checks simulated output provenance, not generated software.
   </footer>
 </main>

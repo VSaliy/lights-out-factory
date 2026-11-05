@@ -39,6 +39,33 @@ jobs:
       - name: Test frontend
         run: npm test -- --watch=false
         working-directory: frontend
+      - name: Lint frontend formatting
+        run: npm run lint
+        working-directory: frontend
       - name: Build frontend
         run: npm run build
         working-directory: frontend
+
+  browser-e2e:
+    name: Browser workflow (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install browser test dependencies
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+        working-directory: frontend
+      - name: Start application stack
+        run: docker compose up --build -d --wait
+      - name: Run browser workflow
+        run: npm run test:e2e
+        working-directory: frontend
+      - name: Stop application stack
+        if: always()
+        run: docker compose down -v
