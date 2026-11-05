@@ -1,0 +1,178 @@
+<header class="topbar">
+  <div class="brand-mark" aria-hidden="true">LO</div>
+  <div>
+    <p class="eyebrow">SUPERVISED ENGINEERING</p>
+    <h1>Lights-Out Factory</h1>
+  </div>
+  <span class="environment">LOCAL DEMO</span>
+</header>
+
+<main>
+  <section class="intro">
+    <div>
+      <p class="eyebrow">WORKFLOW OVERVIEW</p>
+      <h2>Make progress visible.</h2>
+      <p class="muted">Plan, approve, and verify bounded work with a deterministic mock agent.</p>
+    </div>
+    <div class="metrics" aria-label="Workflow counts">
+      <div>
+        <strong>{{ items().length }}</strong
+        ><span>Work items</span>
+      </div>
+      <div>
+        <strong>{{ count('EXECUTING') }}</strong
+        ><span>In progress</span>
+      </div>
+      <div>
+        <strong>{{ count('COMPLETED') }}</strong
+        ><span>Completed</span>
+      </div>
+      <div>
+        <strong>{{ count('FAILED') }}</strong
+        ><span>Failed</span>
+      </div>
+    </div>
+  </section>
+
+  @if (error()) {
+    <div class="notice error" role="alert">{{ error() }}</div>
+  }
+  @if (loading()) {
+    <p class="notice" role="status">Loading work items…</p>
+  }
+
+  <section class="workspace">
+    <section class="panel create-panel" aria-labelledby="create-heading">
+      <p class="eyebrow">NEW REQUEST</p>
+      <h2 id="create-heading">Create a work item</h2>
+      <form [formGroup]="form" (ngSubmit)="createWorkItem()">
+        <label for="title">Title</label>
+        <input id="title" formControlName="title" maxlength="160" required />
+        @if (form.controls.title.touched && form.controls.title.invalid) {
+          <small class="field-error">Enter a title of 1–160 characters.</small>
+        }
+
+        <label for="description">Description</label>
+        <textarea
+          id="description"
+          formControlName="description"
+          rows="3"
+          maxlength="4000"
+          required
+        ></textarea>
+
+        <label for="criteria">Acceptance criteria</label>
+        <textarea
+          id="criteria"
+          formControlName="acceptanceCriteria"
+          rows="3"
+          maxlength="4000"
+          required
+        ></textarea>
+
+        <label for="priority">Priority</label>
+        <select id="priority" formControlName="priority">
+          <option value="P1">P1 · High</option>
+          <option value="P2">P2 · Normal</option>
+          <option value="P3">P3 · Low</option>
+        </select>
+        <button class="primary" type="submit" [disabled]="form.invalid || busy()">
+          {{ busy() ? 'Saving…' : 'Create work item' }}
+        </button>
+      </form>
+    </section>
+
+    <section class="panel items-panel" aria-labelledby="items-heading">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">DELIVERY QUEUE</p>
+          <h2 id="items-heading">Work items</h2>
+        </div>
+        <button class="quiet" type="button" (click)="reload()" [disabled]="busy()">Refresh</button>
+      </div>
+
+      @if (!loading() && items().length === 0) {
+        <div class="empty-state">
+          <h3>No work items yet</h3>
+          <p>Create a request to begin the supervised workflow.</p>
+        </div>
+      }
+
+      @for (item of items(); track item.id) {
+        <article class="work-item" [class.selected]="selectedId() === item.id">
+          <div class="item-heading">
+            <div>
+              <span class="priority">{{ item.priority }}</span>
+              <h3>{{ item.title }}</h3>
+            </div>
+            <span class="status" [attr.data-status]="item.status">{{
+              item.status.replace('_', ' ')
+            }}</span>
+          </div>
+          <p class="description">{{ item.description }}</p>
+          <p class="criteria"><strong>Acceptance:</strong> {{ item.acceptanceCriteria }}</p>
+          <div class="item-actions">
+            <button type="button" class="quiet" (click)="inspect(item)">History</button>
+            @if (item.status === 'CREATED') {
+              <button type="button" class="primary" (click)="createPlan(item)" [disabled]="busy()">
+                Create plan
+              </button>
+            } @else if (item.status === 'AWAITING_APPROVAL' && item.latestPlanId) {
+              <button type="button" class="primary" (click)="approve(item)" [disabled]="busy()">
+                Approve plan
+              </button>
+            } @else if (item.status === 'APPROVED' && item.latestPlanId) {
+              <button type="button" class="primary" (click)="execute(item)" [disabled]="busy()">
+                Execute mock
+              </button>
+            } @else if (item.status === 'REVIEW_REQUIRED') {
+              <button type="button" class="primary" (click)="complete(item)" [disabled]="busy()">
+                Mark complete
+              </button>
+            }
+          </div>
+          @if (selectedId() === item.id) {
+            <div class="history">
+              <h4>Execution evidence</h4>
+              @if (execution()) {
+                <p>
+                  <span class="simulated">SIMULATED</span> {{ execution()?.providerType }} ·
+                  {{ execution()?.status }}
+                </p>
+                <p>{{ execution()?.outputSummary || execution()?.errorCode }}</p>
+                <p>
+                  Quality gate:
+                  <strong [class.good]="execution()?.gateStatus === 'PASSED'">{{
+                    execution()?.gateStatus
+                  }}</strong>
+                  — {{ execution()?.gateEvidence }}
+                </p>
+                <p class="muted">Correlation ID: {{ execution()?.correlationId }}</p>
+              } @else {
+                <p class="muted">No execution evidence for this item yet.</p>
+              }
+              <h4>Audit trail</h4>
+              @if (events().length === 0) {
+                <p class="muted">No events recorded.</p>
+              } @else {
+                <ol class="timeline">
+                  @for (event of events(); track event.id) {
+                    <li>
+                      <time>{{ event.occurredAt | date: 'short' }}</time
+                      ><strong>{{ event.action.replaceAll('_', ' ') }}</strong
+                      ><span>{{ event.actor }}</span>
+                    </li>
+                  }
+                </ol>
+              }
+            </div>
+          }
+        </article>
+      }
+    </section>
+  </section>
+  <footer>
+    <strong>Simulation only.</strong> The mock agent does not edit repositories or run tests. The
+    quality gate checks simulated output provenance, not generated software.
+  </footer>
+</main>
